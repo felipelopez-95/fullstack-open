@@ -1,30 +1,24 @@
-import { useState,useEffect } from 'react'
-import axios from 'axios'
+import { useState, useEffect } from 'react'
 
 import Filter from './components/Filter'
 import PersonForm from './components/PersonForm'
 import Persons from './components/Persons'
+import Notification from './components/Notification'
+import personService from './components/services/persons'
 
 const App = () => {
   const [persons, setPersons] = useState([])
   const [newName, setNewName] = useState('')
   const [newNumber, setNewNumber] = useState('')
   const [filter, setFilter] = useState('')
+  const [message, setMessage] = useState(null)
+  const [messageType, setMessageType] = useState('success')
 
-  const hooks = () => {
-    console.log('effect')
-    axios
-      .get('http://localhost:3001/persons')
-      .then(response => {
-        console.log('promise fulfielld')
-        setPersons(response.data)
-        
-      })
-  }
-
-  useEffect(hooks, [])
-  console.log('render', persons.length, 'persons')
-  
+  useEffect(() => {
+    personService.getAll().then((initialPersons) => {
+      setPersons(initialPersons)
+    })
+  }, [])
 
   const addPerson = (event) => {
     event.preventDefault()
@@ -39,26 +33,76 @@ const App = () => {
     })
 
     if (exists) {
-      alert(`${newName} is already added to phonebook`)
+      if (window.confirm(`${personObject.name} is already added to phonebook, replace the old number with a new one?`)) {
+        const person = persons.find(n => n.name === personObject.name)
+        const changedPerson = { ...person, number: newNumber }
+
+        personService
+          .update(person.id, changedPerson)
+          .then(returnedPerson => {
+            setPersons(persons.map(p => p.id !== person.id ? p : returnedPerson))
+            setNewName('')
+            setNewNumber('')
+            setMessageType('success')
+            setMessage(
+              `Modified ${returnedPerson.name}`
+            )
+            setTimeout(() => {
+              setMessage(null)
+            }, 5000)
+          })
+          .catch(error => {
+            setMessageType('error')
+            setMessage(
+              `Information of ${person.name} has already been removed from server`
+            )
+            setPersons(persons.filter(n => n.id !== person.id))
+            setNewName('')
+            setNewNumber('')
+            setTimeout(() => {
+              setMessage(null)
+            }, 5000)
+          })
+      }
     } else {
-      setPersons(persons.concat(personObject))
-      setNewName('')
-      setNewNumber('')
+      personService
+        .create(personObject)
+        .then((returnedPerson) => {
+          setPersons(persons.concat(returnedPerson))
+          setNewName('')
+          setNewNumber('')
+          setMessageType('success')
+          setMessage(
+            `Added ${returnedPerson.name}`
+          )
+          setTimeout(() => {
+            setMessage(null)
+          }, 5000)
+        })
+    }
+  }
+
+  const toogleDeleteOf = (id) => {
+    const person = persons.find(n => n.id === id)
+
+    if (window.confirm(`Delete ${person.name}?`)) {
+      personService
+        .remove(id)
+        .then(() => {
+          setPersons(persons.filter(n => n.id !== id))
+        })
     }
   }
 
   const handleNameChange = (event) => {
-    console.log(event.target.value)
     setNewName(event.target.value)
   }
 
   const handleNumberChange = (event) => {
-    console.log(event.target.value)
     setNewNumber(event.target.value)
   }
 
   const searchPerson = (event) => {
-    console.log(event.target.value)
     setFilter(event.target.value)
   }
 
@@ -72,14 +116,24 @@ const App = () => {
   return (
     <div>
       <h2>Phonebook</h2>
+      <Notification message={message} className={messageType} />
       <div>
          <Filter onChange={searchPerson} />
       </div>
       <h2>add a new</h2>
-      <PersonForm addPerson={addPerson} newName={newName} handleNameChange={handleNameChange} newNumber={newNumber} handleNumberChange={handleNumberChange}/>
+      <PersonForm
+        addPerson={addPerson}
+        newName={newName}
+        handleNameChange={handleNameChange}
+        newNumber={newNumber}
+        handleNumberChange={handleNumberChange}
+      />
       <h2>Numbers</h2>
       <ul>
-        <Persons personToShow={personToShow} />
+        <Persons
+          personToShow={personToShow}
+          toogleDeleteOf={toogleDeleteOf}
+        />
       </ul>
     </div>
   )
